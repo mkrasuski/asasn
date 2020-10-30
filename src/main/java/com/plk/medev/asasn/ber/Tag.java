@@ -7,33 +7,24 @@ public class Tag {
     public static final int CONTEXT = 0b10000000;
     public static final int PRIVATE = 0b11000000;
     public static final int CLASS_MASK = 0b11000000;
-    public static final int VALUE_MASK = 0b00111111;
+    public static final int VALUE_MASK = 0b00011111;
+    public static final int CONSTRUCT_MASK = 0b00100000;
 
-    public enum TagClass {
 
-        Universal(UNIVERSAL),
-        Application(APPLICATION),
-        Context(CONTEXT),
-        Private(PRIVATE);
-
-        int value;
-
-        TagClass(int tagClass) { value = tagClass; }
-    }
-
-    public TagClass tagClass;
+    public int tagClass;
+    public boolean constructed;
     public long tagValue;
 
-    Tag(int c, long value) {
-        tagClass = TagClass.Universal;
-        tagValue = value;
+    Tag(int cls, boolean cnst, long val) {
+        tagClass = cls;
+        constructed = cnst;
+        tagValue = val;
     }
 
     @Override
     public String toString() {
-        return "Tag{" +
-                "tagClass=" + tagClass +
-                ", tagValue=" + tagValue +
-                '}';
+        return className[tagClass >> 6] + tagValue;
     }
+
+    static final String[] className = {"U", "A", "C", "P"};
 }
