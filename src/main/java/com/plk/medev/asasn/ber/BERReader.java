@@ -2,16 +2,18 @@ package com.plk.medev.asasn.ber;
 
 public class BERReader {
 
-    private static final String HEX_DIGITS = "0123456789ABCDEF";
+    private static final int MASK_7BITS = 0b01111111;
+    private static final int MASK_8TH_BIT = 0b10000000;
+    private static final int MASK_LO_NIBBLE = 0b00001111;
+    private static final int MASK_HI_NIBBLE = 0b11110000;
+    private static final int MASK_BYTE = MASK_HI_NIBBLE | MASK_LO_NIBBLE;
 
-    private int offset;
     private int ptr;
     private byte[] buffer;
     private int size;
 
     public BERReader(byte[] buf, int off, int len) {
         buffer = buf;
-        offset = off;
         ptr = off;
         size = off + len;
     }
@@ -25,7 +27,7 @@ public class BERReader {
     }
 
     private int next() {
-        return (ptr < size) ? (buffer[ptr++] & 0xFF) : -1;
+        return (ptr < size) ? (buffer[ptr++] & MASK_BYTE) : -1;
     }
 
     public Tag readTag() {
@@ -64,8 +66,8 @@ public class BERReader {
         long value = 0;
         while (true) {
             int b = next();
-            value |= (b & 0x7f);
-            if (0 == (b & 0x80)) break;
+            value |= (b & MASK_7BITS);
+            if (0 == (b & MASK_8TH_BIT)) break;
             value <<= 7;
         }
         return value;
@@ -81,16 +83,36 @@ public class BERReader {
         return vr;
     }
 
-    public String readHexBuffer(int len) {
-        char[] hex = new char[2*len];
-        for (int i = 0, p = 0; i < len; i++) {
-            int b = next();
-            hex[p++] = HEX_DIGITS.charAt((b & 0xF0) >> 4);
-            hex[p++] = HEX_DIGITS.charAt(b & 0x0F);
-        }
-        return String.valueOf(hex);
-    }
+    public static void printTLV(StringBuilder out, BERReader br, String path, String pfx) {
 
+        while (br.available()) {
+            Tag tag = br.readTag();
+            int len = br.readLen();
+
+            String fieldPath = path + tag.toString();
+            final EPGSchema.ASNField field = EPGSchema.findField(fieldPath);
+
+            out.append(pfx)
+                    .append(field == null ? fieldPath : field.field)
+                    .append('(')
+                    .append(len)
+                    .append("):  ");
+
+            if (tag.constructed) {
+
+                out.append('\n');
+                printTLV(out, br.valueReader(len), fieldPath + ".", pfx + "  ");
+
+            } else {
+                EPGSchema.Stringer stringer = (field != null) ?
+                        field.stringer
+                        : EPGSchema.valSTRING;
+                stringer.stringify(br.buffer, br.ptr, len, out);
+                out.append('\n');
+                br.skip(len);
+            }
+        }
+    }
 
     public boolean available() {
         return ptr < size;
