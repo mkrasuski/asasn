@@ -1,2 +1,4 @@
 # Project exclude paths
 /.gradle/
+/go-asasn/asasn
+/go-asasn/out

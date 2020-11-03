@@ -71,3 +71,7 @@ func (b *Buffer) SubBuffer(len int) *Buffer {
 	b.buffer = b.buffer[len:]
 	return &Buffer{buffer: sub}
 }
+
+func (b *Buffer) skipBytes(len int) {
+	b.buffer = b.buffer[len:]
+}

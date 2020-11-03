@@ -39,6 +39,7 @@ func (b *Buffer) readOneTLV(out Output, path string, depth int) {
 
 	out.WriteString(indent[:depth])
 	out.WriteString(name)
+	out.WriteByte(' ')
 	out.WriteByte(':')
 	out.WriteByte(' ')
 

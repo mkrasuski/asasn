@@ -35,12 +35,176 @@ func dictionary(path string, name string, format FieldFormater) {
 var valSTRING = (*Buffer).AsString
 var valNULL = (*Buffer).AsString
 var valINTEGER = (*Buffer).AsInt
-var valBCD = (*Buffer).AsHex
-var valBOOLEAN = (*Buffer).AsInt
+var valBCD = (*Buffer).AsBCD
+var valBOOLEAN = (*Buffer).AsBool
 var valCHOICE = empty
 var valSET = empty
 var valSEQUENCE = empty
 var valOBJID = (*Buffer).AsHex
+
+func patchField(name string, fmter FieldFormater) {
+
+	for _, v := range epgFields {
+		if v.name == name {
+			v.format = fmter
+		}
+	}
+}
+
+func patchManyFields(fmter FieldFormater, fields ...string) {
+	for _, v := range epgFields {
+		for _, fn := range fields {
+			if v.name == fn {
+				v.format = fmter
+			}
+		}
+	}
+}
+
+func makeEnum(m map[int64]string) FieldFormater {
+
+	return func(b *Buffer, out Output, len int) {
+		val := b.readInt(len)
+		out.WriteString(strconv.FormatInt(val, 10))
+		if label, ok := m[val]; ok {
+			out.WriteByte(' ')
+			out.WriteString(label)
+		}
+	}
+}
+
+func epgPatches(deps bool) bool {
+
+	patchField("serviceConditionChange", makeEnum(map[int64]string{
+		0:  "// QoS Change",
+		1:  "// SGSN Change",
+		2:  "// SGSN PLMN Id Change",
+		3:  "// Tariff Time Switch",
+		4:  "// PDP Context Release",
+		5:  "// RAT Change",
+		6:  "// Service Idle Out",
+		9:  "// Service Stop",
+		10: "// DCCA Time Treshold Reached",
+		11: "// DCCA Volume Treshold Reached",
+		12: "// DCCA Service Specific Time Treshold Reached",
+		13: "// DCCA Time Exhausted",
+		14: "// DCCA Volume Exhausted",
+		15: "// DCCA Validity Timeout",
+		17: "// DCCA Reauthorisation Request",
+		18: "// DCCA Continue Ongoing Session",
+		19: "// DCCA Retry And Terminate Ongoing Session",
+		20: "// DCCA Terminate Ongoing Session",
+		21: "// CGI/SAI Change",
+		22: "// RAI Change",
+		23: "// DCCA Service Specific Unit Exhausted",
+		24: "// Record Closure",
+		29: "// ECGI Change",
+		30: "// TAI Change",
+	}))
+
+	patchField("servingNodeType", makeEnum(map[int64]string{
+		0: "// SGSN",
+		1: "// PMIPSGW",
+		2: "// GTPSGW",
+		3: "// EPDG",
+		4: "// HSGW",
+		5: "// MME",
+	}))
+
+	patchField("recordType", makeEnum(map[int64]string{
+		19: "// GGSN PDP Record",
+		70: "// EGSN PDP Record",
+		84: "// SGW Record",
+		85: "// PGW Record",
+	}))
+
+	patchField("rATType", makeEnum(map[int64]string{
+		0: "// <reserved>",
+		1: "// UTRAN",
+		2: "// GERAN",
+		3: "// WLAN",
+		4: "// GAN 4",
+		5: "// HSPA Evolution",
+		6: "// EUTRAN",
+	}))
+
+	patchField("causeForRecClosing", makeEnum(map[int64]string{
+		0:   "// Normal Release",
+		4:   "// Abnormal Release",
+		16:  "// Volume Limit",
+		17:  "// Time Limit",
+		18:  "// Serving Node Change",
+		19:  "// Max Change Condition",
+		22:  "// RAT Change",
+		23:  "// TimeZone Change",
+		24:  "// SGSN PLMN ID Change",
+		100: "// Management Init Release",
+		101: "// PLMN Change",
+		102: "// Credit Control Change",
+		104: "// Credit Control Init Release",
+		105: "// Policy Control Init Release",
+	}))
+
+	patchField("apnSelectionMode", makeEnum(map[int64]string{
+		0: "// User Equipment or network provided APN, subscription verified",
+		1: "// User Equipment provided APN, subscription not verified",
+		2: "// Network provided APN, subscription not verified",
+	}))
+
+	patchField("chChSelectionMode", makeEnum(map[int64]string{
+		0:   "// Serving Node Supplied",
+		3:   "// Home Default",
+		4:   "// Roaming Default",
+		5:   "// Visiting Default",
+		100: "// Radius Supplied",
+		101: "// Roaming Class Based",
+	}))
+
+	patchField("changeCondition", makeEnum(map[int64]string{
+		0: "// QoS Change",
+		1: "// Tariff Time",
+		2: "// Record Closure",
+		3: "// Failure Handling Continue Ongoing",
+		4: "// Failure Handling Retry And Terminate Ongoing",
+		5: "// Failure Handling Terrminate Ongoing",
+	}))
+
+	patchField("chargingCharacteristics", makeEnum(map[int64]string{
+		0x0100: "// Hot Billing",
+		0x0200: "// Flat Rate",
+		0x0400: "// Prepaid",
+		0x0800: "// Normal",
+	}))
+
+	patchManyFields((*Buffer).AsRHex,
+		"servedIMEISV",
+		"servedIMSI",
+	)
+
+	patchManyFields((*Buffer).AsIPAddress,
+		"iPBinV4Address",
+	)
+
+	patchManyFields((*Buffer).AsTimestamp,
+		"changeTime",
+		"eventTimeStamps",
+		"recordOpeningTime",
+		"startTime",
+		"stopTime",
+		"timeOfFirstUsage",
+		"timeOfLastUsage",
+		"timeOfReport",
+	)
+
+	patchManyFields((*Buffer).AsPLMN,
+		"p_GWPLMNIdentifier",
+		"pLMNIdentifier",
+		"servingNodePLMNIdentifier",
+		"sgsnPLMNIdentifier",
+	)
+
+	return true
+}
 
 func epgSchema() bool {
 	dictionary(".C21", "ggsnPDPRecord", valSET)
@@ -490,146 +654,6 @@ func epgSchema() bool {
 	dictionary(".C79.C45.C0.C2", "iPTextV4Address", valSTRING)
 	dictionary(".C79.C45.C0.C3", "iPTextV6Address", valSTRING)
 	dictionary(".C79.C45.C1", "eTSIAddress", valBCD)
-
-	return true
-}
-
-func patchField(name string, fmter FieldFormater) {
-
-	for _, v := range epgFields {
-		if v.name == name {
-			v.format = fmter
-		}
-	}
-}
-
-func patchManyFields(fmter FieldFormater, fields ...string) {
-	for _, v := range epgFields {
-		for _, fn := range fields {
-			if v.name == fn {
-				v.format = fmter
-			}
-		}
-	}
-}
-
-func makeEnum(m map[int64]string) FieldFormater {
-
-	return func(b *Buffer, out Output, len int) {
-		val := b.readInt(len)
-		out.WriteString(strconv.FormatInt(val, 10))
-		if label, ok := m[val]; ok {
-			out.WriteByte(' ')
-			out.WriteString(label)
-		}
-	}
-}
-
-func epgPatches(deps bool) bool {
-
-	patchField("serviceConditionChange", makeEnum(map[int64]string{
-		0:  "// QoS Change",
-		1:  "// SGSN Change",
-		2:  "// SGSN PLMN Id Change",
-		3:  "// Tariff Time Switch",
-		4:  "// PDP Context Release",
-		5:  "// RAT Change",
-		6:  "// Service Idle Out",
-		9:  "// Service Stop",
-		10: "// DCCA Time Treshold Reached",
-		11: "// DCCA Volume Treshold Reached",
-		12: "// DCCA Service Specific Time Treshold Reached",
-		13: "// DCCA Time Exhausted",
-		14: "// DCCA Volume Exhausted",
-		15: "// DCCA Validity Timeout",
-		17: "// DCCA Reauthorisation Request",
-		18: "// DCCA Continue Ongoing Session",
-		19: "// DCCA Retry And Terminate Ongoing Session",
-		20: "// DCCA Terminate Ongoing Session",
-		21: "// CGI/SAI Change",
-		22: "// RAI Change",
-		23: "// DCCA Service Specific Unit Exhausted",
-		24: "// Record Closure",
-		29: "// ECGI Change",
-		30: "// TAI Change",
-	}))
-
-	patchField("servingNodeType", makeEnum(map[int64]string{
-		0: "// SGSN",
-		1: "// PMIPSGW",
-		2: "// GTPSGW",
-		3: "// EPDG",
-		4: "// HSGW",
-		5: "// MME",
-	}))
-
-	patchField("recordType", makeEnum(map[int64]string{
-		19: "// GGSN PDP Record",
-		70: "// EGSN PDP Record",
-		84: "// SGW Record",
-		85: "// PGW Record",
-	}))
-
-	patchField("rATType", makeEnum(map[int64]string{
-		0: "// <reserved>",
-		1: "// UTRAN",
-		2: "// GERAN",
-		3: "// WLAN",
-		4: "// GAN 4",
-		5: "// HSPA Evolution",
-		6: "// EUTRAN",
-	}))
-
-	patchField("causeForRecClosing", makeEnum(map[int64]string{
-		0:   "// Normal Release",
-		4:   "// Abnormal Release",
-		16:  "// Volume Limit",
-		17:  "// Time Limit",
-		18:  "// Serving Node Change",
-		19:  "// Max Change Condition",
-		22:  "// RAT Change",
-		23:  "// TimeZone Change",
-		24:  "// SGSN PLMN ID Change",
-		100: "// Management Init Release",
-		101: "// PLMN Change",
-		102: "// Credit Control Change",
-		104: "// Credit Control Init Release",
-		105: "// Policy Control Init Release",
-	}))
-
-	patchField("apnSelectionMode", makeEnum(map[int64]string{
-		0: "// User Equipment or network provided APN, subscription verified",
-		1: "// User Equipment provided APN, subscription not verified",
-		2: "// Network provided APN, subscription not verified",
-	}))
-
-	patchField("chChSelectionMode", makeEnum(map[int64]string{
-		0:   "// Serving Node Supplied",
-		3:   "// Home Default",
-		4:   "// Roaming Default",
-		5:   "// Visiting Default",
-		100: "// Radius Supplied",
-		101: "// Roaming Class Based",
-	}))
-
-	patchField("changeCondition", makeEnum(map[int64]string{
-		0: "// QoS Change",
-		1: "// Tariff Time",
-		2: "// Record Closure",
-		3: "// Failure Handling Continue Ongoing",
-		4: "// Failure Handling Retry And Terminate Ongoing",
-		5: "// Failure Handling Terrminate Ongoing",
-	}))
-
-	patchField("chargingCharacteristics", makeEnum(map[int64]string{
-		0x0100: "// Hot Billing",
-		0x0200: "// Flat Rate",
-		0x0400: "// Prepaid",
-		0x0800: "// Normal",
-	}))
-
-	patchManyFields((*Buffer).AsRHex, "servedIMEISV", "servedIMSI")
-	patchManyFields((*Buffer).AsIPAddress, "iPBinV4Address")
 
 	return true
 }
